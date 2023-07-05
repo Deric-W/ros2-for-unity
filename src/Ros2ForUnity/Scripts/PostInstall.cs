@@ -34,8 +34,8 @@ internal class PostInstall : IPostprocessBuildWithReport
         var r2csMetadataName = "metadata_ros2cs.xml";
 
         // FileUtil.CopyFileOrDirectory: All file separators should be forward ones "/".
-        var r2fuMeta = ROS2ForUnity.GetRos2ForUnityPath() + "/" + r2fuMetadataName; 
-        var r2csMeta = ROS2ForUnity.GetPluginPath() + "/" + r2csMetadataName;
+        var r2fuMeta = Setup.GetRos2ForUnityPath() + "/" + r2fuMetadataName; 
+        var r2csMeta = Setup.GetPluginPath() + "/" + r2csMetadataName;
         var outputDir = Directory.GetParent(report.summary.outputPath);
         var execFilename = Path.GetFileNameWithoutExtension(report.summary.outputPath);
         FileUtil.CopyFileOrDirectory(
