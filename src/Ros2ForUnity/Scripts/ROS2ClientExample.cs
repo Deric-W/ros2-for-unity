@@ -13,92 +13,83 @@
 // limitations under the License.
 
 using System.Collections;
-using System.Collections.Generic;
 using System.Threading.Tasks;
-using UnityEngine;
+using example_interfaces.srv;
 using ROS2;
-
-using addTwoIntsReq = example_interfaces.srv.AddTwoInts_Request;
-using addTwoIntsResp = example_interfaces.srv.AddTwoInts_Response;
+using UnityEngine;
 
 /// <summary>
 /// An example class provided for testing of basic ROS2 client
 /// </summary>
 public class ROS2ClientExample : MonoBehaviour
 {
-    private ROS2UnityComponent ros2Unity;
-    private ROS2Node ros2Node;
-    private IClient<addTwoIntsReq, addTwoIntsResp> addTwoIntsClient;
-    private bool isRunning = false;
-    private Task<addTwoIntsResp> asyncTask;
+    /// <summary>
+    /// Service topic.
+    /// </summary>
+    public string Topic = "add_two_ints";
 
-    IEnumerator periodicAsyncCall()
-    {
-        while (ros2Unity.Ok())
-        {
+    /// <summary>
+    /// Timeout for requests.
+    /// </summary>
+    public float Timeout = 1;
 
-            while (!addTwoIntsClient.IsServiceAvailable())
-            {
-                yield return new WaitForSecondsRealtime(1);
-            }
+    private IClient<AddTwoInts_Request, AddTwoInts_Response> Client;
 
-            addTwoIntsReq request = new addTwoIntsReq();
-            request.A = Random.Range(0, 100);
-            request.B = Random.Range(0, 100);
-            
-            asyncTask = addTwoIntsClient.CallAsync(request);
-            asyncTask.ContinueWith((task) => { Debug.Log("Got async answer " + task.Result.Sum); });
-            
-            yield return new WaitForSecondsRealtime(1);
-        }
-    }
-
-    IEnumerator periodicCall()
-    {
-        while (ros2Unity.Ok())
-        {
-
-            while (!addTwoIntsClient.IsServiceAvailable())
-            {
-                yield return new WaitForSecondsRealtime(1);
-            }
-
-            addTwoIntsReq request = new addTwoIntsReq();
-            request.A = Random.Range(0, 100);
-            request.B = Random.Range(0, 100);
-            var response = addTwoIntsClient.Call(request);
-
-            Debug.Log("Got sync answer " + response.Sum);
-
-            yield return new WaitForSecondsRealtime(1);
-        }
-    }
-
+    /// <summary>
+    /// Create the client.
+    /// </summary>
     void Start()
     {
-        ros2Unity = GetComponent<ROS2UnityComponent>();
-        if (ros2Unity.Ok())
-        {
-            if (ros2Node == null)
-            {
-                ros2Node = ros2Unity.CreateNode("ROS2UnityClient");
-                addTwoIntsClient = ros2Node.CreateClient<addTwoIntsReq, addTwoIntsResp>(
-                    "add_two_ints");
-            }
-        }
+        this.Client = this.GetComponent<NodeComponent>().CreateClient<AddTwoInts_Request, AddTwoInts_Response>(
+            this.Topic
+        );
+        this.StartCoroutine(this.RequestAnswers());
     }
 
-    void Update()
+    /// <summary>
+    /// Dispose the client.
+    /// </summary>
+    void OnDestroy()
     {
-        if (!isRunning)
+        this.Client?.Dispose();
+    }
+
+    /// <summary>
+    /// Wait for the service to become available
+    /// and send random requests.
+    /// </summary>
+    /// <returns></returns>
+    private IEnumerator RequestAnswers()
+    {
+        while (!this.Client.IsServiceAvailable())
         {
-            isRunning = true;
+            Debug.Log("Waiting for Service");
+            yield return new WaitForSecondsRealtime(0.25f);
+        }
 
-            // Async calls
-            StartCoroutine(periodicAsyncCall());
+        var request = new AddTwoInts_Request();
+        while (true)
+        {
+            request.A = Random.Range(0, 100);
+            request.B = Random.Range(0, 100);
 
-            // Sync calls
-            StartCoroutine(periodicCall());
+            Debug.Log($"Request answer for {request.A} + {request.B}");
+            using (Task<AddTwoInts_Response> task = this.Client.CallAsync(request))
+            {
+                float deadline = Time.time + this.Timeout;
+                yield return new WaitUntil(() => task.IsCompleted || Time.time >= deadline);
+
+                if (task.IsCompleted)
+                {
+                    Debug.Log($"Received answer {task.Result.Sum}");
+                    Debug.Assert(task.Result.Sum == request.A + request.B, "Received invalid answer");
+                }
+                else
+                {
+                    Debug.LogError($"Service call timed out");
+                    this.Client.Cancel(task);
+                }
+            }
         }
     }
 }
