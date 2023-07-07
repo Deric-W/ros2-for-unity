@@ -121,7 +121,7 @@ namespace ROS2
         /// <summary>
         /// Assert that <see cref="Context"/> is not <see cref="null"/>.
         /// </summary>
-        void OnValidate()
+        protected void OnValidate()
         {
             Debug.Assert(!(this.Context is null), "Context is null");
         }
