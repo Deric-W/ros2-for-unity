@@ -138,22 +138,6 @@ namespace ROS2
         }
 
         /// <summary>
-        /// Setup PATH for native libraries.
-        /// </summary>
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        static void SetupPath()
-        {
-            if (GetOS() == Platform.Windows)
-            {
-                Environment.SetEnvironmentVariable("PATH", $"{GetPluginPath()};{Environment.GetEnvironmentVariable("PATH")}");
-            }
-            else
-            {
-                ROS2.GlobalVariables.absolutePath = $"{GetPluginPath()}/";
-            }
-        }
-
-        /// <summary>
         /// Connect <see cref="Ros2csLogger"/> to the Unity logging system.
         /// </summary>
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSplashScreen)]
