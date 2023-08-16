@@ -4,7 +4,7 @@ using UnityEngine;
 namespace ROS2
 {
     /// <summary>
-    /// Executor component which is spun on every frame.
+    /// Executor component which is spun on every frame if it is enabled.
     /// </summary>
     public sealed class FrameExecutor : ExecutorComponent
     {

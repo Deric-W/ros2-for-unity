@@ -22,7 +22,8 @@ namespace ROS2
         /// Task managed by this executor.
         /// </summary>
         /// <remarks>
-        /// Available after <see cref="Awake"/> has been called.
+        /// Available after <see cref="OnEnable"/> has been called the first time.
+        /// The task is stored until the next call to <see cref="OnEnable"/>.
         /// </remarks>
         public Task Task { get; private set; }
 
@@ -48,10 +49,11 @@ namespace ROS2
         /// Stop <see cref="Task"/> and return after it has stopped.
         /// </summary>
         /// <remarks>
-        /// This function returns immediately if <see cref="Task"/>
+        /// This method returns immediately if <see cref="Task"/>
         /// was not started or has been already stopped.
+        /// It ignores whether <see cref="Task"/> faulted.
         /// </remarks>
-        private void StopSpinTask()
+        private void AssertStopped()
         {
             try
             {
@@ -65,9 +67,9 @@ namespace ROS2
             {
                 this.Task?.Wait();
             }
-            catch (AggregateException e)
+            catch (AggregateException)
             {
-                e.Handle(inner => inner is TaskCanceledException);
+                // ignore whether the task faulted
             }
             catch (ObjectDisposedException)
             {
@@ -75,24 +77,51 @@ namespace ROS2
             }
         }
 
+        /// <summary>
+        /// Registers a callback with <see cref="Context.OnShutdown"/>
+        /// to stop <see cref="Task"/>.
+        /// </summary>
         void Awake()
         {
-            var executor = this.LazyExecutor.Value;
-            this.CancellationSource = new CancellationTokenSource();
-            this.Task = executor.CreateSpinTask(TimeSpan.FromSeconds(this.Timeout), this.CancellationSource.Token);
+            _ = this.LazyExecutor.Value;
+            this.Context.OnShutdown += this.AssertStopped;
         }
 
         /// <summary>
-        /// Starts <see cref="Task"/>.
+        /// Starts a new <see cref="Task"/>.
+        /// </summary>
+        void OnEnable()
+        {
+            Debug.Assert(this.Task is null || this.Task.IsCompleted, "Task was not stopped before enabling executor", this);
+            Debug.Assert(this.CancellationSource is null, "CancellationSource was not cleaned up when enabling executor", this);
+
+            this.CancellationSource = new CancellationTokenSource();
+            this.Task = this.LazyExecutor.Value.CreateSpinTask(TimeSpan.FromSeconds(this.Timeout), this.CancellationSource.Token);
+            this.Task.Start();
+        }
+
+        /// <summary>
+        /// Stops the current <see cref="Task"/>.
         /// </summary>
         /// <remarks>
-        /// A callback is registered with <see cref="Context.OnShutdown"/>
-        /// to stop <see cref="Task"/>.
+        /// Inspect <see cref="Task.IsFaulted"/> to see if it faulted.
         /// </remarks>
-        void Start()
+        void OnDisable()
         {
-            this.Context.OnShutdown += this.StopSpinTask;
-            this.Task.Start();
+            Debug.Assert(this.Task.Status != TaskStatus.Created, "Task was not started before disabling executor", this);
+
+            this.CancellationSource.Cancel();
+            try
+            {
+                this.Task.Wait();
+            }
+            catch (AggregateException)
+            {
+                // ignore since we only need to make sure that the task is not running
+            }
+            this.Task.Dispose();
+            this.CancellationSource.Dispose();
+            this.CancellationSource = null;
         }
 
         /// <summary>
@@ -117,18 +146,11 @@ namespace ROS2
         /// </summary>
         public override void Dispose()
         {
-            try
-            {
-                this.StopSpinTask();
-            }
-            catch (AggregateException)
-            {
-                // prevent faulted task from preventing disposal
-            }
-            this.Context.OnShutdown -= this.StopSpinTask;
-            this.Task.Dispose();
+            this.AssertStopped();
+            this.Context.OnShutdown -= this.AssertStopped;
+            this.Task?.Dispose();
             base.Dispose();
-            this.CancellationSource.Dispose();
+            this.CancellationSource?.Dispose();
         }
     }
 }
