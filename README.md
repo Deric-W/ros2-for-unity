@@ -88,6 +88,9 @@ otherwise
         // asuming that the component is attached to the same GameObject
         IContext context = GetComponent<ContextComponent>();
         ```
+
+    When running in edit mode call `Setup.SetupPath()` before to prevent the native libraries from failing to load.
+
 2. Create a node. You have (again) two options:
     1. Creating nodes directly using the context:
         ```cs
