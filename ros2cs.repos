@@ -1,5 +1,5 @@
 repositories:
   src/ros2cs/:
     type: git
-    url:     https://github.com/RobotecAI/ros2cs.git
-    version: 1.3.0
+    url:     http://git.swe.advitec.de/ADVITEC/ros2cs.git
+    version: 2.0.0

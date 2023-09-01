@@ -12,41 +12,46 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
+using System;
+using example_interfaces.srv;
 using ROS2;
-
-using addTwoIntsReq = example_interfaces.srv.AddTwoInts_Request;
-using addTwoIntsResp = example_interfaces.srv.AddTwoInts_Response;
+using UnityEngine;
 
 /// <summary>
 /// An example class provided for testing of basic ROS2 service
 /// </summary>
 public class ROS2ServiceExample : MonoBehaviour
 {
-    private ROS2UnityComponent ros2Unity;
-    private ROS2Node ros2Node;
-    private IService<addTwoIntsReq, addTwoIntsResp> addTwoIntsService;
+    /// <summary>
+    /// Topic of the service.
+    /// </summary>
+    public string Topic = "add_two_ints";
 
+    private IService<AddTwoInts_Request, AddTwoInts_Response> Service;
+
+    /// <summary>
+    /// Create the service.
+    /// </summary>
     void Start()
     {
-        ros2Unity = GetComponent<ROS2UnityComponent>();
-        if (ros2Unity.Ok())
-        {
-            if (ros2Node == null)
-            {
-                ros2Node = ros2Unity.CreateNode("ROS2UnityService");
-                addTwoIntsService = ros2Node.CreateService<addTwoIntsReq, addTwoIntsResp>(
-                    "add_two_ints", addTwoInts);
-            }
-        }
+        this.Service = this.GetComponent<NodeComponent>().CreateService<AddTwoInts_Request, AddTwoInts_Response>(
+            this.Topic,
+            this.AddTwoInts
+        );
     }
 
-    public example_interfaces.srv.AddTwoInts_Response addTwoInts( example_interfaces.srv.AddTwoInts_Request msg)
+    /// <summary>
+    /// Dispose the service.
+    /// </summary>
+    void OnDestroy()
     {
-        Debug.Log("Incoming Service Request A=" + msg.A + " B=" + msg.B);
-        example_interfaces.srv.AddTwoInts_Response response = new example_interfaces.srv.AddTwoInts_Response();
+        this.Service?.Dispose();
+    }
+
+    private AddTwoInts_Response AddTwoInts(AddTwoInts_Request msg)
+    {
+        Debug.Log($"Incoming Service Request A={msg.A} B={msg.B}");
+        AddTwoInts_Response response = new AddTwoInts_Response();
         response.Sum = msg.A + msg.B;
         return response;
     }

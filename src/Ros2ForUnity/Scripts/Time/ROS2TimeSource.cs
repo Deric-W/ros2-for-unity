@@ -26,14 +26,6 @@ public class ROS2TimeSource : ITimeSource
 
   public void GetTime(out int seconds, out uint nanoseconds)
   {
-    if (!ROS2.Ros2cs.Ok())
-    {
-      seconds = 0;
-      nanoseconds = 0;
-      Debug.LogWarning("Cannot acquire valid ros time, ros either not initialized or shut down already");
-      return;
-    }
-
     if (clock == null)
     { // Create clock which uses system time by default (unless use_sim_time is set in ros2)
       clock = new ROS2.Clock();
