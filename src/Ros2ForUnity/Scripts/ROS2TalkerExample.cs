@@ -12,43 +12,48 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+using System;
+using ROS2;
 using UnityEngine;
-
-namespace ROS2
-{
 
 /// <summary>
 /// An example class provided for testing of basic ROS2 communication
 /// </summary>
 public class ROS2TalkerExample : MonoBehaviour
 {
-    // Start is called before the first frame update
-    private ROS2UnityComponent ros2Unity;
-    private ROS2Node ros2Node;
-    private IPublisher<std_msgs.msg.String> chatter_pub;
-    private int i;
+    /// <summary>
+    /// Topic to publish to.
+    /// </summary>
+    public string Topic = "chatter";
 
+    private IPublisher<std_msgs.msg.String> Publisher;
+
+    private int i = 0;
+
+    /// <summary>
+    /// Create the publisher.
+    /// </summary>
     void Start()
     {
-        ros2Unity = GetComponent<ROS2UnityComponent>();
+        this.Publisher = this.GetComponent<NodeComponent>().CreatePublisher<std_msgs.msg.String>(this.Topic);
     }
 
+    /// <summary>
+    /// Dispose the publisher.
+    /// </summary>
+    void OnDestroy()
+    {
+        this.Publisher?.Dispose();
+    }
+
+    /// <summary>
+    /// Publish a new message.
+    /// </summary>
     void Update()
     {
-        if (ros2Unity.Ok())
-        {
-            if (ros2Node == null)
-            {
-                ros2Node = ros2Unity.CreateNode("ROS2UnityTalkerNode");
-                chatter_pub = ros2Node.CreatePublisher<std_msgs.msg.String>("chatter");
-            }
-
-            i++;
-            std_msgs.msg.String msg = new std_msgs.msg.String();
-            msg.Data = "Unity ROS2 sending: hello " + i;
-            chatter_pub.Publish(msg);
-        }
+        this.i++;
+        var msg = new std_msgs.msg.String();
+        msg.Data = $"Unity ROS2 sending: hello {i}";
+        this.Publisher.Publish(msg);
     }
 }
-
-}  // namespace ROS2
