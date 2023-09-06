@@ -21,7 +21,7 @@ using UnityEngine;
 /// <summary>
 /// An example class provided for testing of basic ROS2 client
 /// </summary>
-public class ROS2ClientExample : MonoBehaviour
+public class ClientExample : MonoBehaviour
 {
     /// <summary>
     /// Service topic.

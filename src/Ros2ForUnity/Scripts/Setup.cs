@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Xml;
+using System.Xml.Serialization;
 using UnityEngine;
 
 namespace ROS2
@@ -8,93 +9,72 @@ namespace ROS2
     /// <summary>
     /// Class used for setup tasks.
     /// </summary>
-    internal static class Setup
+    public static class Setup
     {
+        private const string MetadataFileName = "ros2-for-unity";
+
+        [XmlRoot("ros2-for-unity", IsNullable = false)]
+        public sealed class MetaData
+        {
+            [XmlElement("ros")]
+            public string RosVersion;
+
+            [XmlElement("standalone")]
+            public bool IsStandalone;
+
+            public MetaData()
+            { }
+
+            public static MetaData Load()
+            {
+                XmlSerializer serializer = new XmlSerializer(typeof(MetaData));
+                TextAsset asset = Resources.Load<TextAsset>(MetadataFileName);
+                return (MetaData)serializer.Deserialize(new MemoryStream(asset.bytes));
+            }
+        }
+
         private enum Platform
         {
             Windows,
             Linux
         }
 
-        private static Platform GetOS()
+        private static Platform CurrentPlatform
         {
-            switch (Application.platform)
+            get
             {
-                case RuntimePlatform.LinuxEditor:
-                case RuntimePlatform.LinuxPlayer:
-                    return Platform.Linux;
-                case RuntimePlatform.WindowsEditor:
-                case RuntimePlatform.WindowsPlayer:
-                    return Platform.Windows;
-                default:
-                    throw new NotSupportedException("Only Linux and Windows are supported");
+                switch (Application.platform)
+                {
+                    case RuntimePlatform.LinuxEditor:
+                    case RuntimePlatform.LinuxPlayer:
+                        return Platform.Linux;
+                    case RuntimePlatform.WindowsEditor:
+                    case RuntimePlatform.WindowsPlayer:
+                        return Platform.Windows;
+                    default:
+                        throw new NotSupportedException("Only Linux and Windows are supported");
+                }
             }
         }
 
-        private static string GetOSName(this Platform platform)
+        internal static string PluginPath
         {
-            switch (platform)
+            get
             {
-                case Platform.Linux:
-                    return "Linux";
-                case Platform.Windows:
-                    return "Windows";
-                default:
-                    throw new NotSupportedException("Only Linux and Windows are supported");
+                switch (Application.platform)
+                {
+                    case RuntimePlatform.LinuxEditor:
+                        return Path.GetFullPath("Packages/ai.robotec.ros2-for-unity/Plugins") + "/Linux/x86_64";
+                    case RuntimePlatform.LinuxPlayer:
+                        return Path.GetFullPath(Application.dataPath) + "/Plugins";
+                    case RuntimePlatform.WindowsEditor:
+                        return Path.GetFullPath("Packages/ai.robotec.ros2-for-unity/Plugins").Replace("/", "\\") + "\\Windows\\x86_64";
+                    case RuntimePlatform.WindowsPlayer:
+                        return Path.GetFullPath(Application.dataPath).Replace("/", "\\") + "\\Plugins\\x86_64";
+                    default:
+                        throw new NotSupportedException("Only Linux and Windows are supported");
+                }
             }
-        }
-
-        internal static string GetRos2ForUnityPath()
-        {
-            string pluginPath = Application.dataPath;
-
-            if (Application.isEditor)
-            {
-                pluginPath += Path.DirectorySeparatorChar + "Ros2ForUnity";
-            }
-            return pluginPath;
-        }
-
-        internal static string GetPluginPath()
-        {
-            string pluginPath = GetRos2ForUnityPath();
-            Platform platform = GetOS();
-
-            pluginPath += Path.DirectorySeparatorChar + "Plugins";
-
-            if (Application.isEditor)
-            {
-                pluginPath += Path.DirectorySeparatorChar + platform.GetOSName();
-            }
-
-            if (Application.isEditor || platform == Platform.Windows)
-            {
-                pluginPath += Path.DirectorySeparatorChar + "x86_64";
-            }
-
-            if (platform == Platform.Windows)
-            {
-                pluginPath = pluginPath.Replace("/", "\\");
-            }
-
-            return pluginPath;
-        }
-
-        private static (string ROS, bool Standalone) GetRos2csMetadata()
-        {
-            XmlDocument metadata = new XmlDocument();
-            metadata.Load(GetPluginPath() + Path.DirectorySeparatorChar + "metadata_ros2cs.xml");
-            return (
-                metadata.DocumentElement.SelectSingleNode("/ros2cs/ros2").InnerText,
-                Convert.ToBoolean(Convert.ToInt16(metadata.DocumentElement.SelectSingleNode("/ros2cs/standalone").InnerText))
-            );
-        }
-
-        private static string GetRos2ForUnityMetadata()
-        {
-            XmlDocument metadata = new XmlDocument();
-            metadata.Load(GetRos2ForUnityPath() + Path.DirectorySeparatorChar + "metadata_ros2_for_unity.xml");
-            return metadata.DocumentElement.SelectSingleNode("/ros2_for_unity/ros2").InnerText;
         }
 
         private static string GetSourcedROS()
@@ -103,54 +83,57 @@ namespace ROS2
         }
 
         /// <summary>
+        /// Setup PATH for native libraries.
+        /// </summary>
+        /// <remarks>
+        /// Is called automatically when Unity starts, has to be called manually when running in edit mode.
+        /// </remarks>
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        public static void SetupPath()
+        {
+            string pathVariable;
+            string pathSeparator;
+            switch (CurrentPlatform)
+            {
+                case Platform.Windows:
+                    pathVariable = "PATH";
+                    pathSeparator = ";";
+                    break;
+                case Platform.Linux:
+                    pathVariable = "LD_LIBRARY_PATH";
+                    pathSeparator = ":";
+                    break;
+                default:
+                    throw new NotSupportedException("unsupported platform");
+            }
+            Environment.SetEnvironmentVariable(pathVariable, $"{PluginPath}{pathSeparator}{Environment.GetEnvironmentVariable(pathVariable)}");
+        }
+
+        /// <summary>
         /// Check for correct ROS2 setup.
         /// </summary>
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSplashScreen)]
         static void CheckIntegrity()
         {
+            MetaData metaData = MetaData.Load();
             string sourced = GetSourcedROS();
-            var ros2cs = GetRos2csMetadata();
-            var ros2forUnity = GetRos2ForUnityMetadata();
-            if (ros2cs.ROS != ros2forUnity)
+            if (!metaData.IsStandalone && sourced != metaData.RosVersion)
             {
                 Debug.LogError(
-                    $"ROS2 versions in 'ros2cs' ({ros2cs.ROS}) and 'ros2-for-unity' ({ros2forUnity}) metadata files are not the same. " +
+                    $"ROS2 version in 'ros2cs' metadata ({metaData.RosVersion}) doesn't match currently sourced version ({sourced}). " +
                     "This is caused by mixing versions/builds. Plugin might not work correctly."
                 );
             }
-            if (!ros2cs.Standalone && sourced != ros2cs.ROS)
-            {
-                Debug.LogError(
-                    $"ROS2 version in 'ros2cs' metadata ({ros2cs.ROS}) doesn't match currently sourced version ({sourced}). " +
-                    "This is caused by mixing versions/builds. Plugin might not work correctly."
-                );
-            }
-            if (ros2cs.Standalone && !string.IsNullOrEmpty(sourced))
+            if (metaData.IsStandalone && !string.IsNullOrEmpty(sourced))
             {
                 Debug.LogError(
                     "You should not source ROS2 in 'ros2-for-unity' standalone build. " +
                     "Plugin might not work correctly."
                 );
             }
-            string rosVersion = string.IsNullOrEmpty(sourced) ? ros2forUnity : sourced;
-            string standalone = ros2cs.Standalone ? "standalone" : "non-standalone";
+            string rosVersion = string.IsNullOrEmpty(sourced) ? metaData.RosVersion : sourced;
+            string standalone = metaData.IsStandalone ? "standalone" : "non-standalone";
             Debug.Log($"ROS2 version: {rosVersion}. Build type: {standalone}. RMW: {Context.GetRMWImplementation()}");
-        }
-
-        /// <summary>
-        /// Setup PATH for native libraries.
-        /// </summary>
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        static void SetupPath()
-        {
-            if (GetOS() == Platform.Windows)
-            {
-                Environment.SetEnvironmentVariable("PATH", $"{GetPluginPath()};{Environment.GetEnvironmentVariable("PATH")}");
-            }
-            else
-            {
-                ROS2.GlobalVariables.absolutePath = $"{GetPluginPath()}/";
-            }
         }
 
         /// <summary>

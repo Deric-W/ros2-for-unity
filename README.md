@@ -8,7 +8,7 @@ Advantages of this module include:
 - The module supplies abstractions and tools to use in your Unity project, including transformations, sensor interface, a clock, spinning loop wrapped in a MonoBehavior, handling initialization and shutdown.
 - Supports all standard ROS2 messages.
 - Custom messages are generated automatically with build, using standard ROS2 way. It is straightforward to generate and use them without having to define `.cs` equivalents by hand.
-- The module is wrapped as a Unity asset.
+- The module is wrapped as a Unity package.
 
 ## Platforms
 
@@ -44,7 +44,7 @@ You can download pre-built [releases](https://github.com/RobotecAI/ros2-for-unit
 ## Building
 
 > **Note:** The project will pull `ros2cs` into the workspace, which also functions independently as it is a more general project aimed at any `C# / .Net` environment.
-It has its own README and scripting, but for building the Unity Asset, please use instructions and scripting in this document instead, unless you also wish to run tests or examples for `ros2cs`.
+It has its own README and scripting, but for building the Unity package, please use instructions and scripting in this document instead, unless you also wish to run tests or examples for `ros2cs`.
 
 Please see OS-specific instructions:
 - [Instructions for Ubuntu](README-UBUNTU.md)
@@ -59,10 +59,8 @@ Custom messages can be included in the build by either:
 ## Installation
 
 1. Perform building steps described in the OS-specific readme or download pre-built Unity package. Do not source `ros2-for-unity` nor `ros2cs` project into ROS2 workspace.
-1. Open or create Unity project.
-1. Import asset into project:
-    1. copy `install/asset/Ros2ForUnity` into your project `Assets` folder, or
-    1. if you have deployed an `.unitypackage` - import it in Unity Editor by selecting `Import Package` → `Custom Package`
+2. Open or create Unity project.
+3. Import `install/package/Ros2ForUnity` into your project with the package manager
 
 ## Usage
 
@@ -76,117 +74,150 @@ otherwise
 
 **Initializing Ros2ForUnity**
 
-1. Initialize `Ros2ForUnity` by creating a "hook" object which will be your wrapper around ROS2. You have two options:
-    1. `ROS2UnityComponent` based on `MonoBehaviour` which must be attached to a `GameObject` somewhere in the scene, then:
-        ```c#
+1. Initialize ROS by creating a context. You have two options:
+    1. `Context` which is a standard class that can be created anywhere:
+        ```cs
         using ROS2;
-        ...
-        // Example method of getting component, if ROS2UnityComponent lives in different GameObject, just use different get component methods.
-        ROS2UnityComponent ros2Unity = GetComponent<ROS2UnityComponent>();
+
+        IContext context = new Context();
         ```
-    1. or `ROS2UnityCore` which is a standard class that can be created anywhere
-        ```c#
+    2. `ContextComponent` which is a `MonoBehavior` and attached to a `GameObject` somewhere in the scene:
+        ```cs
         using ROS2;
-        ...
-        ROS2UnityCore ros2Unity = new ROS2UnityCore();
+
+        // asuming that the component is attached to the same GameObject
+        IContext context = GetComponent<ContextComponent>();
         ```
-1. Create a node. You must first check if `Ros2ForUnity` is initialized correctly:
-    ```c#
-    private ROS2Node ros2Node;
-    ...
-    if (ros2Unity.Ok()) {
-        ros2Node = ros2Unity.CreateNode("ROS2UnityListenerNode");
-    }
-    ```
+
+    When running in edit mode call `Setup.SetupPath()` before to prevent the native libraries from failing to load.
+
+2. Create a node. You have (again) two options:
+    1. Creating nodes directly using the context:
+        ```cs
+        using ROS2;
+
+        if (!context.TryCreateNode("ROS2UnityListenerNode", out INode node))
+        {
+            throw new InvalidOperationException("node already exists");
+        }
+        ```
+
+    2. Using a `NodeComponent` which is a `MonoBehavior` and attached to a `GameObject` somewhere in the scene:
+
+        - the component allows an executor to be configured which allows you to skip parts of the next step
+
+        ```cs
+        using ROS2;
+
+        // asuming that the component is attached to the same GameObject
+        INode node = GetComponent<NodeComponent>();
+        ```
+
+3. Create an executor handling events of your nodes. You have multiple options:
+    1. use `ManualExecutor` if you want to have control over where and when events are handled:
+        ```cs
+        using ROS2.Executors;
+
+        ManualExecutor executor = new ManualExecutor(context);
+        executor.Add(node);
+
+        executor.SpinWhile(() => true);
+        ```
+    2. use `TaskExecutor` to perform the handling of events in a separate task:
+        ```cs
+        using ROS2.Executors;
+
+        TaskExecutor executor = new TaskExecutor(context, TimeSpan.FromSeconds(0.25));
+        executor.Add(node);
+        ```
+    3. use `TaskExecutorComponent` which is a `MonoBehavior` behaving like `TaskExecutor`
+
+        - dont forget that most of the Unity API is not available when executing in a different task or thread
+
+    4. use `FrameExecutor` which is a `MonoBehavior` and handles events every time `Update` is called
 
 **Publishing messages:**
 
-1. Create publisher
-    ```c#
-    private IPublisher<std_msgs.msg.String> chatter_pub;
-    ...
-    if (ros2Unity.Ok()){
-        chatter_pub = ros2Node.CreatePublisher<std_msgs.msg.String>("chatter"); 
-    }
+1. Create a publisher
+    ```cs
+    using ROS;
+
+    IPublisher<std_msgs.msg.String> chatter_pub = node.CreatePublisher("chatter");
     ```
-1. Send messages
-    ```c#
-    std_msgs.msg.String msg = new std_msgs.msg.String();
-    msg.Data = "Hello Ros2ForUnity!";
+2. Send messages
+    ```cs
+    std_msgs.msg.String msg = new std_msgs.msg.String { Data = "Hello Ros2ForUnity!" };
     chatter_pub.Publish(msg);
     ```
 
 **Subscribing to a topic**
 
-1. Create subscriber:
-    ```c#
-    private ISubscription<std_msgs.msg.String> chatter_sub;
-    ...
-    if (ros2Unity.Ok()) {
-        chatter_sub = ros2Node.CreateSubscription<std_msgs.msg.String>(
-            "chatter", msg => Debug.Log("Unity listener heard: [" + msg.Data + "]"));
-    }
+1. Create a subscription:
+    ```cs
+    using ROS;
+
+    ISubscription<std_msgs.msg.String> chatter_sub = node.CreateSubscription(
+        "chatter",
+        msg => Debug.Log($"Unity listener heard: [{msg.Data}]")
+    );
     ```
 
 **Creating a service**
 
-1. Create service body:
-    ```c#
-    public example_interfaces.srv.AddTwoInts_Response addTwoInts( example_interfaces.srv.AddTwoInts_Request msg)
-    {
-        example_interfaces.srv.AddTwoInts_Response response = new example_interfaces.srv.AddTwoInts_Response();
-        response.Sum = msg.A + msg.B;
-        return response;
-    }
-    ```
+1. Create a service:
+    ```cs
+    using ROS;
 
-1. Create a service with a service name and callback:
-    ```c#
-    IService<example_interfaces.srv.AddTwoInts_Request, example_interfaces.srv.AddTwoInts_Response> service = 
-        ros2Node.CreateService<example_interfaces.srv.AddTwoInts_Request, example_interfaces.srv.AddTwoInts_Response>(
-            "add_two_ints", addTwoInts);
+    IService<example_interfaces.srv.AddTwoInts_Request, example_interfaces.srv.AddTwoInts_Response> service =
+        node.CreateService(
+            "add_two_ints"
+            request => new example_interfaces.srv.AddTwoInts_Response { Sum = request.A + request.B };
+        )
     ```
 
 **Calling a service**
 
 1. Create a client:
-    ```c#
-    private IClient<example_interfaces.srv.AddTwoInts_Request, example_interfaces.srv.AddTwoInts_Response> addTwoIntsClient;
-    ...
-    addTwoIntsClient = ros2Node.CreateClient<example_interfaces.srv.AddTwoInts_Request, example_interfaces.srv.AddTwoInts_Response>(
-        "add_two_ints");
+    ```cs
+    using ROS;
+
+    IClient<example_interfaces.srv.AddTwoInts_Request, example_interfaces.srv.AddTwoInts_Response> addTwoIntsClient =
+        node.CreateClient("add_two_ints");
     ```
 
-1. Create a request and call a service:
-    ```c#
-    example_interfaces.srv.AddTwoInts_Request request = new example_interfaces.srv.AddTwoInts_Request();
-    request.A = 1;
-    request.B = 2;
-    var response = addTwoIntsClient.Call(request);
+2. Create a request and call a service:
+    ```cs
+    using ROS;
+
+    var request = new example_interfaces.srv.AddTwoInts_Request { A = 1, B = 2 };
+    Debug.Log($"Received answer {addTwoIntsClient.Call(request)}");
     ```
 
-1. You can also make an async call:
-    ```c#
-    Task<example_interfaces.srv.AddTwoInts_Response> asyncTask = addTwoIntsClient.CallAsync(request);
-    ...
-    asyncTask.ContinueWith((task) => { Debug.Log("Got answer " + task.Result.Sum); });
+3. You can also make an async call to prevent blocking Unity and other scripts:
+    ```cs
+    using ROS2;
+
+    using (Task<example_interfaces.srv.AddTwoInts_Response> asyncTask = addTwoIntsClient.CallAsync(request))
+    {
+        // has to be done inside a coroutine
+        yield return new WaitUntil(() => task.IsCompleted);
+        if (task.IsCompletedSuccessfully)
+        {
+            Debug.Log($"Received answer {task.Result.Sum}");
+        }
+        else
+        {
+            Debug.Log("Call failed");
+        }
+    }
+
     ```
+
+Dont forget to dispose the instances after you finished using them.
+
 ### Examples
 
-1. Create a top-level object containing `ROS2UnityComponent.cs`. This is the central `Monobehavior` for `Ros2ForUnity` that manages all the nodes. Refer to class documentation for details.
-    > **Note:** Each example script looks for `ROS2UnityComponent` in its own game object. However, this is not a requirement, just example implementation.
-
-**Topics**
-1. Add `ROS2TalkerExample.cs` script to the very same game object.
-1. Add `ROS2ListenerExample.cs` script to the very same game object.
-
-Once you start the project in Unity, you should be able to see two nodes talking with each other in  Unity Editor's console or use `ros2 node list` and `ros2 topic echo /chatter` to verify ros2 communication.
-
-**Services**
-1. Add `ROS2ServiceExample.cs` script to the very same game object.
-1. Add `ROS2ClientExample.cs` script to the very same game object.
-
-Once you start the project in Unity, you should be able to see client node calling an example service.
+More complete examples are included in the Unity package.
 
 ## Acknowledgements 
 

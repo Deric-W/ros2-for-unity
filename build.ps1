@@ -40,18 +40,20 @@ if($standalone) {
 } else {
   & "python" $SCRIPTPATH\src\scripts\metadata_generator.py
 }
+if ($LASTEXITCODE -ne 0)
+{
+    Write-Host "Generating the Metadata failed!" -ForegroundColor Red
+    exit 1
+}
 
 & "$scriptPath\src\ros2cs\build.ps1" @options
 if($?) {
-    md -Force $scriptPath\install\asset | Out-Null
-    Copy-Item -Path $scriptPath\src\Ros2ForUnity -Destination $scriptPath\install\asset\ -Recurse -Force
+    mkdir -Force $scriptPath\install\package | Out-Null
+    Copy-Item -Path $scriptPath\src\Ros2ForUnity -Destination $scriptPath\install\package\ -Recurse -Force
     
-    $plugin_path=Join-Path -Path $scriptPath -ChildPath "\install\asset\Ros2ForUnity\Plugins\"
+    $plugin_path=Join-Path -Path $scriptPath -ChildPath "\install\package\Ros2ForUnity\Plugins\"
     Write-Host "Deploying build to $plugin_path" -ForegroundColor Green
     & "$scriptPath\deploy_unity_plugins.ps1" $plugin_path
-
-    Copy-Item -Path $scriptPath\src\Ros2ForUnity\metadata_ros2cs.xml -Destination $scriptPath\install\asset\Ros2ForUnity\Plugins\Windows\x86_64\
-    Copy-Item -Path $scriptPath\src\Ros2ForUnity\metadata_ros2cs.xml -Destination $scriptPath\install\asset\Ros2ForUnity\Plugins\
 } else {
     Write-Host "Ros2cs build failed!" -ForegroundColor Red
     exit 1

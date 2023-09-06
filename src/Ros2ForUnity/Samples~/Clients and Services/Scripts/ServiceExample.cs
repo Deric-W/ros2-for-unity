@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-using System;
 using example_interfaces.srv;
 using ROS2;
 using UnityEngine;
@@ -20,7 +19,7 @@ using UnityEngine;
 /// <summary>
 /// An example class provided for testing of basic ROS2 service
 /// </summary>
-public class ROS2ServiceExample : MonoBehaviour
+public class ServiceExample : MonoBehaviour
 {
     /// <summary>
     /// Topic of the service.
@@ -51,8 +50,6 @@ public class ROS2ServiceExample : MonoBehaviour
     private AddTwoInts_Response AddTwoInts(AddTwoInts_Request msg)
     {
         Debug.Log($"Incoming Service Request A={msg.A} B={msg.B}");
-        AddTwoInts_Response response = new AddTwoInts_Response();
-        response.Sum = msg.A + msg.B;
-        return response;
+        return new AddTwoInts_Response { Sum = msg.A + msg.B };
     }
 }
