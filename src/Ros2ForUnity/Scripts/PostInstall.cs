@@ -31,7 +31,7 @@ namespace ROS2
 
         public void OnPostprocessBuild(BuildReport report)
         {
-            if (EditorUserBuildSettings.activeBuildTarget == BuildTarget.StandaloneLinux64)
+            if (report.summary.platform == BuildTarget.StandaloneLinux64)
             {
                 // Copy versioned libraries (Unity skips them)
                 Regex soWithVersionReg = new Regex(@".*\.so(\.[0-9])+$");
@@ -40,7 +40,7 @@ namespace ROS2
                 string execFilename = Path.GetFileNameWithoutExtension(report.summary.outputPath);
                 foreach (string libPath in versionedLibs)
                 {
-                    FileUtil.CopyFileOrDirectory(libPath, $"{outputDir}/{execFilename}_Data/Plugins/x86_64/{Path.GetFileName(libPath)}");
+                    FileUtil.CopyFileOrDirectory(libPath, $"{outputDir}/{execFilename}_Data/Plugins/{Path.GetFileName(libPath)}");
                 }
             }
         }
