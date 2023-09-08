@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+using System;
 using UnityEngine;
 
 namespace ROS2
@@ -31,7 +32,9 @@ public class ROS2TimeSource : ITimeSource
       clock = new ROS2.Clock();
     }
   
-    TimeUtils.TimeFromTotalSeconds(clock.Now.Seconds, out seconds, out nanoseconds);
+    var now = clock.Now;
+    seconds = Convert.ToInt32(now.Seconds);
+    nanoseconds = now.Nanoseconds;
   }
 
   ~ROS2TimeSource()
