@@ -3,6 +3,7 @@ using System.IO;
 using System.Xml;
 using System.Xml.Serialization;
 using UnityEngine;
+using UnityEngine.Scripting;
 
 namespace ROS2
 {
@@ -22,6 +23,7 @@ namespace ROS2
             [XmlElement("standalone")]
             public bool IsStandalone;
 
+            [Preserve]
             public MetaData()
             { }
 
